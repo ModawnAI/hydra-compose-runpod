@@ -50,9 +50,9 @@ def check_nvenc_available() -> bool:
         return False
 
 
-def handler(job: dict) -> dict:
+async def async_handler(job: dict) -> dict:
     """
-    RunPod handler function for video rendering.
+    Async RunPod handler function for video rendering.
 
     Input (job["input"]):
         Same as Modal RenderRequest:
@@ -99,18 +99,9 @@ def handler(job: dict) -> dict:
         # Progress callback
         async def progress_callback(job_id: str, progress: int, step: str):
             logger.info(f"[{job_id}] [{progress:3d}%] {step}")
-            # RunPod supports streaming progress updates
-            runpod.serverless.progress_update(job, progress / 100)
 
-        # Run async render
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            output_url = loop.run_until_complete(
-                renderer.render(request, progress_callback)
-            )
-        finally:
-            loop.close()
+        # Run async render directly (we're already in async context)
+        output_url = await renderer.render(request, progress_callback)
 
         logger.info(f"[{job_id}] === Render complete ===")
         logger.info(f"[{job_id}] Output: {output_url}")
@@ -135,6 +126,15 @@ def handler(job: dict) -> dict:
             "output_url": None,
             "error": error_msg,
         }
+
+
+def handler(job: dict) -> dict:
+    """Sync wrapper for RunPod handler."""
+    import nest_asyncio
+    nest_asyncio.apply()
+
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(async_handler(job))
 
 
 # RunPod serverless entrypoint
