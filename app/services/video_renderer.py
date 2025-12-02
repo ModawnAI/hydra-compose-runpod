@@ -282,7 +282,9 @@ class VideoRenderer:
             use_nvenc = os.environ.get("USE_NVENC", "0") == "1"
 
             if use_nvenc:
-                # NVENC: NVIDIA GPU hardware encoding (fast, high quality)
+                # NVENC: NVIDIA GPU hardware encoding
+                # Settings from NVIDIA Video Codec SDK documentation:
+                # https://docs.nvidia.com/video-technologies/video-codec-sdk/ffmpeg-with-nvidia-gpu/
                 logger.info(f"[{job_id}] Rendering video with NVENC (GPU)")
                 await asyncio.get_event_loop().run_in_executor(
                     None,
@@ -293,12 +295,17 @@ class VideoRenderer:
                         audio_codec="aac",
                         threads=4,
                         ffmpeg_params=[
-                            "-preset", "p4",  # Balanced speed/quality
-                            "-rc", "vbr",  # Variable bitrate
-                            "-cq", "19",  # Constant quality (lower = better)
-                            "-b:v", "8M",  # Target bitrate
-                            "-maxrate", "12M",  # Max bitrate
-                            "-bufsize", "16M",  # Buffer size
+                            "-preset", "p4",        # Medium speed/quality balance
+                            "-tune", "hq",          # High quality tuning
+                            "-rc", "vbr",           # Variable bitrate mode
+                            "-cq", "19",            # Constant quality (lower = better)
+                            "-b:v", "8M",           # Target bitrate
+                            "-maxrate", "12M",      # Max bitrate
+                            "-bufsize", "16M",      # Buffer size
+                            "-rc-lookahead", "20",  # Lookahead frames for better quality
+                            "-bf", "3",             # B-frames
+                            "-b_ref_mode", "middle",# B-frame reference mode
+                            "-temporal-aq", "1",    # Temporal adaptive quantization
                             "-movflags", "+faststart"
                         ],
                         temp_audiofile=temp_audiofile,
