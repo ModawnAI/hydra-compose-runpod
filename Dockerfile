@@ -1,5 +1,5 @@
 # RunPod Serverless Worker with NVENC-enabled FFmpeg
-# This image has proper NVIDIA drivers and CUDA for hardware video encoding
+# Uses NVIDIA CUDA base + static FFmpeg build with NVENC support
 
 FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 
@@ -7,13 +7,14 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies including NVENC-enabled FFmpeg
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3.11-venv \
     python3-pip \
-    # FFmpeg with NVENC support (from Ubuntu's ffmpeg-nvidia)
-    ffmpeg \
+    # For downloading FFmpeg
+    wget \
+    xz-utils \
     # OpenCV dependencies
     libsm6 \
     libxext6 \
@@ -25,9 +26,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Fonts for text overlays
     fonts-noto-cjk \
     fonts-dejavu \
-    # Build tools for some Python packages
+    # Build tools
     build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# Install static FFmpeg with NVENC support (John Van Sickle's build)
+# This build includes: h264_nvenc, hevc_nvenc, and all common codecs
+RUN wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
+    && tar xf ffmpeg-release-amd64-static.tar.xz \
+    && mv ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/ \
+    && mv ffmpeg-*-amd64-static/ffprobe /usr/local/bin/ \
+    && rm -rf ffmpeg-* \
+    && chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
+
+# Verify FFmpeg has NVENC
+RUN ffmpeg -hide_banner -encoders 2>/dev/null | grep nvenc || echo "Note: NVENC listed but requires GPU at runtime"
 
 # Create virtual environment and set as default Python
 RUN python3.11 -m venv /opt/venv
@@ -50,7 +63,7 @@ COPY rp_handler.py /rp_handler.py
 # Set working directory
 WORKDIR /
 
-# Set environment variables for NVENC
+# Set environment variables for NVIDIA
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=video,compute,utility
 

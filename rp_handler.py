@@ -37,16 +37,38 @@ sys.path.insert(0, "/")
 
 def check_nvenc_available() -> bool:
     """
-    Check if NVENC hardware encoding is actually available and working.
-    Returns False to use libx264 (CPU) which is more reliable.
-
-    Note: Ubuntu's default FFmpeg from apt doesn't have NVENC compiled in.
-    To enable NVENC, we need to build FFmpeg from source with --enable-nvenc
-    or use a pre-built image like nvidia/cuda with proper FFmpeg.
+    Check if NVENC hardware encoding is available.
+    Uses John Van Sickle's static FFmpeg build which has NVENC compiled in.
     """
-    # Disable NVENC for now - use reliable libx264 instead
-    # TODO: Enable when using a proper NVENC-enabled FFmpeg build
-    return False
+    import subprocess
+    try:
+        # Check if h264_nvenc encoder is available
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        has_nvenc = "h264_nvenc" in result.stdout
+
+        if has_nvenc:
+            # Also verify GPU is accessible by checking nvidia-smi
+            gpu_check = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if gpu_check.returncode == 0 and gpu_check.stdout.strip():
+                logger.info(f"GPU detected: {gpu_check.stdout.strip()}")
+                return True
+            else:
+                logger.warning("NVENC encoder found but no GPU detected, falling back to libx264")
+                return False
+        return False
+    except Exception as e:
+        logger.warning(f"NVENC check failed: {e}, falling back to libx264")
+        return False
 
 
 def run_async_render(job_input: dict, use_nvenc: bool) -> str:
